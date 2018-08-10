@@ -8,8 +8,15 @@
 
 linked_list_t *clients;          // A list of clients that have pending messages.
 pthread_mutex_t *clients_mutex;  // Mutex for synchronizing clients list.
+
+// Defines whether sending unit should keep running or terminate.
 int sending_unit_run;
+// Thread id of thread that runs sending unit.
 pthread_t sending_unit_tid;
+// Condition for blocking sending unit when no outgoing messages are available.
+pthread_cond_t messages_exist_cond;
+pthread_mutex_t messages_exist_mutex;
+
 
 void
 init_svc()
@@ -115,7 +122,13 @@ void *
 start_sending_unit(void *args)
 {
     while(sending_unit_run) {
+        pthread_mutex_lock(clients_mutex);
+        while (linked_list_size(clients) < 1)
+            pthread_cond_wait(messages_exist_cond, clients_mutex);
 
+        // SENDER UNIT CODE    
+
+        pthread_mutex_unlock(clients_mutex);
     }
 }
 
