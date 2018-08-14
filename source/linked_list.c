@@ -44,6 +44,11 @@ void linked_list_destroy(linked_list_t *list)
     free(list);  // Free actual list object.
 }
 
+void *linked_list_get_first(linked_list_t *list)
+{
+    return list->root->next->data;
+}
+
 node_t *linked_list_append(linked_list_t *list, void *data)
 {
     node_t *node = (node_t *) malloc(sizeof(node_t));
@@ -70,6 +75,23 @@ void *linked_list_pop(linked_list_t *list)
     } else data = NULL;
 
     return data;
+}
+
+node_t *linked_list_push(linked_list_t *list, void *data)
+{
+    node_t *node = (node_t *) malloc(sizeof(node_t));
+
+    list->size++;
+
+    node_t *prev_first = list->root->next;
+    node->next = prev_first;
+    node->prev = list->root;
+    list->root->next = node;
+    prev_first->prev = node;
+
+    node->data = data;
+
+    return node;
 }
 
 void *linked_list_remove(linked_list_t *list, node_t *node)

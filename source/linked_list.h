@@ -37,8 +37,10 @@ typedef struct {
 
 linked_list_t *linked_list_create();
 void linked_list_destroy(linked_list_t *list);
+void *linked_list_get_first(linked_list_t *list);
 node_t *linked_list_append(linked_list_t *list, void *data);
 void *linked_list_pop(linked_list_t *list);
+node_t *linked_list_push(linked_list_t *list, void *data);
 void *linked_list_remove(linked_list_t *list, node_t *node);
 int linked_list_size(linked_list_t *list);
 iterator_t *linked_list_iterator(linked_list_t *list);
