@@ -1,5 +1,34 @@
+/**
+* message.c
+*
+* Created by Dimitrios Karageorgiou,
+*  for course "Embedded And Realtime Systems".
+*  Electrical and Computers Engineering Department, AuTh, GR - 2017-2018
+*
+* An implementation of routines defined in message.h.
+*
+* Version: 0.1
+*/
+
+#include <stdlib.h>
+#include <string.h>
 #include <arpa/inet.h>
 #include "message.h"
+
+
+message_t *
+message_create()
+{
+    message_t *m = (message_t *) malloc(sizeof(message_t));
+    return m;
+}
+
+
+void
+message_destroy(message_t *m)
+{
+    free(m);
+}
 
 
 char *
@@ -34,7 +63,7 @@ message_net_to_host(char *m)
     host->flags = mc->flags;
     host->count = mc->count;
     host->len = ntohs(mc->len);
-    memcpy(host->data, mc->data, MESSAGE_DATA_LENGTH)
+    memcpy(host->data, mc->data, MESSAGE_DATA_LENGTH);
 
     return host;
 }
