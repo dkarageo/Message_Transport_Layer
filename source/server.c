@@ -40,7 +40,7 @@ typedef struct {
 int init_listener(int port);
 void start_listener(int socket_fd);
 void destroy_listener(int socket_fd);
-void handle_client(int client_fd, struct sockaddr_in client_addr);
+void create_handler(int client_fd, struct sockaddr_in client_addr);
 void *start_handler(void *args);
 void error(const char *msg);
 void terminate_server(int signum);
@@ -106,6 +106,7 @@ int main(int argc, char *argv[])
 
     // Terminate Message Transport Layer service.
     stop_svc();
+    printf("MTP terminated.\n");
 
     // Clean up resources.
     pthread_mutex_destroy(list_mutex);
@@ -177,7 +178,7 @@ void start_listener(int socket_fd)
                            (struct sockaddr *) &client_addr,
                            &sock_size)) > -1)
     {
-        handle_client(in_fd, client_addr);
+        create_handler(in_fd, client_addr);
     }
 }
 
@@ -192,7 +193,7 @@ void destroy_listener(int socket_fd)
 /**
  * Create a handler on a new thread for the given client connection.
  */
-void handle_client(int client_fd, struct sockaddr_in client_addr)
+void create_handler(int client_fd, struct sockaddr_in client_addr)
 {
     handler_args_t *args = (handler_args_t *) malloc(sizeof(handler_args_t));
     args->socket_fd = client_fd;
