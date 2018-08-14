@@ -14,7 +14,8 @@
 #include "linked_list.h"
 
 
-linked_list_t *linked_list_create()
+linked_list_t *
+linked_list_create()
 {
     linked_list_t *list = (linked_list_t *) malloc(sizeof(linked_list_t));
 
@@ -31,7 +32,8 @@ linked_list_t *linked_list_create()
     return list;
 }
 
-void linked_list_destroy(linked_list_t *list)
+void
+linked_list_destroy(linked_list_t *list)
 {
     // Remove all the nodes contained in the list, including the root one.
     node_t *cur = list->root;
@@ -44,12 +46,14 @@ void linked_list_destroy(linked_list_t *list)
     free(list);  // Free actual list object.
 }
 
-void *linked_list_get_first(linked_list_t *list)
+void *
+linked_list_get_first(linked_list_t *list)
 {
     return list->root->next->data;
 }
 
-node_t *linked_list_append(linked_list_t *list, void *data)
+node_t *
+linked_list_append(linked_list_t *list, void *data)
 {
     node_t *node = (node_t *) malloc(sizeof(node_t));
 
@@ -65,7 +69,8 @@ node_t *linked_list_append(linked_list_t *list, void *data)
     return node;
 }
 
-void *linked_list_pop(linked_list_t *list)
+void *
+linked_list_pop(linked_list_t *list)
 {
     node_t *first = list->root->next;
     void *data;
@@ -77,7 +82,8 @@ void *linked_list_pop(linked_list_t *list)
     return data;
 }
 
-node_t *linked_list_push(linked_list_t *list, void *data)
+node_t *
+linked_list_push(linked_list_t *list, void *data)
 {
     node_t *node = (node_t *) malloc(sizeof(node_t));
 
@@ -94,7 +100,8 @@ node_t *linked_list_push(linked_list_t *list, void *data)
     return node;
 }
 
-void *linked_list_remove(linked_list_t *list, node_t *node)
+void *
+linked_list_remove(linked_list_t *list, node_t *node)
 {
 	list->size--;
 
@@ -109,12 +116,14 @@ void *linked_list_remove(linked_list_t *list, node_t *node)
     return data;
 }
 
-int linked_list_size(linked_list_t *list)
+int
+linked_list_size(linked_list_t *list)
 {
     return list->size;
 }
 
-iterator_t *linked_list_iterator(linked_list_t *list)
+iterator_t *
+linked_list_iterator(linked_list_t *list)
 {
     iterator_t *iter = (iterator_t *) malloc(sizeof(iterator_t));
     iter->list = list;
@@ -122,19 +131,22 @@ iterator_t *linked_list_iterator(linked_list_t *list)
     return iter;
 }
 
-int iterator_has_next(iterator_t *iter)
+int
+iterator_has_next(iterator_t *iter)
 {
     return iter->next != NULL;
 }
 
-void *iterator_next(iterator_t *iter)
+void *
+iterator_next(iterator_t *iter)
 {
     void *data = iter->next->data;
     iter->next = iter->next->next;
     return data;
 }
 
-void iterator_destroy(iterator_t *iter)
+void
+iterator_destroy(iterator_t *iter)
 {
     free(iter);
 }
