@@ -7,6 +7,7 @@
  *
  * This file implements routines defines in linked_list.h.
  *
+ * Version: 0.2
  */
 
 #include <stdlib.h>
@@ -57,6 +58,18 @@ node_t *linked_list_append(linked_list_t *list, void *data)
     node->data = data;
 
     return node;
+}
+
+void *linked_list_pop(linked_list_t *list)
+{
+    node_t *first = list->root->next;
+    void *data;
+
+    if (first != NULL) {
+        data = linked_list_remove(list, first);
+    } else data = NULL;
+
+    return data;
 }
 
 void *linked_list_remove(linked_list_t *list, node_t *node)
