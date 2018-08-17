@@ -31,10 +31,11 @@ message_destroy(message_t *m)
 }
 
 
-char *
+void *
 message_host_to_net(message_t *m)
 {
-    message_t *net = (message_t *) malloc(sizeof(message_t));
+    void *serial = calloc(1, sizeof(message_t));
+    message_t *net = (message_t *) serial;
 
     net->src_addr = htonl(m->src_addr);
     net->src_port = htons(m->src_port);
@@ -45,12 +46,12 @@ message_host_to_net(message_t *m)
     net->len = htons(m->len);
     memcpy(net->data, m->data, MESSAGE_DATA_LENGTH);
 
-    return (char *) net;
+    return serial;
 }
 
 
 message_t *
-message_net_to_host(char *m)
+message_net_to_host(void *m)
 {
     message_t *host = (message_t *) malloc(sizeof(message_t));
 

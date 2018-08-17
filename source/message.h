@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #define MESSAGE_DATA_LENGTH 256
+#define MESSAGE_COUNT_MAX 65535
 
 #define ERR_BUFFER_FULL 1    // Error when a message buffer is full.
 #define ERR_INVALID_ORDER 2  // Error when received messages are out of order.
@@ -39,8 +40,8 @@ typedef struct {
     uint16_t src_port;   // Port number of message's source.
     uint32_t dest_addr;  // IPv4 address of message's destination.
     uint16_t dest_port;  // Port number on which message should be delivered.
-    uint8_t flags;      // Error flags.
-    uint8_t count;      // Mod8 counter that indicates correct order of messages.
+    uint8_t flags;       // Error flags.
+    uint16_t count;      // Mod16 counter that indicates correct order of messages.
     uint16_t len;        // Length of data array in bytes.
     // A byte array containing data of the message.
     char data[MESSAGE_DATA_LENGTH];
@@ -77,7 +78,7 @@ message_destroy(message_t *m);
  *  A serialized message object represented in network byte order. It can
  *  be send as is through the network.
  */
-char *
+void *
 message_host_to_net(message_t *m);
 
 /**
@@ -90,7 +91,7 @@ message_host_to_net(message_t *m);
  *  A message object represented in byte order of host machine.
  */
 message_t *
-message_net_to_host(char *m);
+message_net_to_host(void *m);
 
 
 #endif
