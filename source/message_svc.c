@@ -101,6 +101,7 @@ stop_svc()
     free(messages_exist_mutex);
     free(messages_exist_cond);
     linked_list_destroy(active_clients);
+    linked_list_destroy(clients);
 }
 
 
@@ -108,6 +109,7 @@ void
 handle_client(int socket_fd)
 {
     client_t *c = client_create(socket_fd);
+    int rc;
 
     // Add new client to list of connected clients.
     pthread_mutex_lock(clients_mutex);
@@ -117,34 +119,64 @@ handle_client(int socket_fd)
     // Buffer for raw network data.
     char *in = (char *) malloc(sizeof(message_t));
     int n;
-    uint8_t counter = 0;  // Local counter that should match incoming messages.
+    uint16_t counter = 0;  // Local counter that should match incoming messages.
     uint8_t first_message = 1;  // Flag for first message to ignore counter.
 
+    // DEBUG
+    // int biggest_error = 0;
+
     // Keep reading incoming messages until the connection is dead.
-    while ((n = recv(socket_fd, in, sizeof(message_t), 0)) > 0) {
+    while ((n = recv(socket_fd, in, sizeof(message_t), MSG_WAITALL)) > 0) {
+        if (n < (int) sizeof(message_t)) {
+            fprintf(stderr, "Failed to completely read incoming messages.\n");
+            // first_message = 1;
+            continue;
+        }
         message_t *message = message_net_to_host(in);
         define_sender(message, c);  // fill sender fields of message
 
+        message->flags = 0;
         uint8_t error_code = 0;  // clear error flags
 
         // A message is not valid unless its 'count' field is a direct increment
         // from the previous successfully received message.
-        if (message->count == (counter+1)%256 || first_message) {
-            first_message = 0;
-            counter = message->count;
-        } else error_code |= ERR_INVALID_ORDER;
+        if (message->count != (counter+1)%(MESSAGE_COUNT_MAX+1) && !first_message) {
+            error_code |= ERR_INVALID_ORDER;
+            // DEBUG
+            // printf("NACKing because of INVALID_ODER\n");
+            // printf("Message had: %d - Expected: %d\n", message->count, (counter+1)%256);
+
+            // DEBUG
+            // int m_c = message->count;
+            // int expect = (counter+1)%(MESSAGE_COUNT_MAX+1);
+            // if (expect > m_c) {
+            //     if (biggest_error < (m_c+(MESSAGE_COUNT_MAX+1)-expect))
+            //         biggest_error = m_c+(MESSAGE_COUNT_MAX+1)-expect;
+            // } else {
+            //     if (biggest_error < (m_c-expect)) biggest_error = m_c-expect;
+            // }
+            // printf("Biggest error: %d\n", biggest_error);
+        }
 
         // If buffer is full, discard message.
         // --- Save a few CPU cycles by not synchronizing check of linked list
         // length. It's better to just NACK a message in the edge case, instead
         // of constantly locking. ---
-        if (linked_list_size(c->out_messages) >= CLIENT_BUF_LEN)
+        if (linked_list_size(c->out_messages) >= CLIENT_BUF_LEN) {
             error_code |= ERR_BUFFER_FULL;
+            // DEBUG
+            // printf("NACKing because of BUFFER FULL\n");
+        }
 
         if (!error_code) {
+            first_message = 0;
+            counter = message->count;
+
             // If no error, push message to pending outgoing messages of this
             // client.
-            pthread_mutex_lock(c->out_mutex);
+            rc = pthread_mutex_lock(c->out_mutex);
+            if (rc) perror("Failed to acquire client out mutex.\n");
+
             int had_messages = linked_list_size(c->out_messages);
             linked_list_append(c->out_messages, message);
 
@@ -152,21 +184,31 @@ handle_client(int socket_fd)
             // had been removed from active clients list by the sending unit.
             // So, add it again and signal sender unit.
             if (!had_messages) {
-                pthread_mutex_lock(active_clients_mutex);
+                rc = pthread_mutex_lock(active_clients_mutex);
+                if (rc) perror("Failed to acquire global out mutex.\n");
                 linked_list_append(active_clients, c);
-                pthread_mutex_unlock(active_clients_mutex);
                 pthread_cond_signal(messages_exist_cond);
+                pthread_mutex_unlock(active_clients_mutex);
             }
 
             pthread_mutex_unlock(c->out_mutex);
 
-        } else NACK_message(message, error_code);
+        } else {
+            NACK_message(message, error_code);
+            message_destroy(message);
+        }
     }
 
-    // Remove client from list of connected clients.
+    // Remove client from connected clients.
     pthread_mutex_lock(clients_mutex);
     linked_list_remove(clients, c_ref);
     pthread_mutex_unlock(clients_mutex);
+
+    // Wait until sender has handled all pending outgoing messages.
+    pthread_mutex_lock(c->out_mutex);
+    while(linked_list_size(c->out_messages) > 0)
+        pthread_cond_wait(c->out_message_removed, c->out_mutex);
+    pthread_mutex_unlock(c->out_mutex);
 
     free(in);
     client_destroy(c);
@@ -176,10 +218,14 @@ handle_client(int socket_fd)
 void *
 start_sending_unit(void *args)
 {
+    int rc;
+
     while(sending_unit_run) {
         message_t *message;  // Next message to be send.
 
-        pthread_mutex_lock(active_clients_mutex);
+        rc = pthread_mutex_lock(active_clients_mutex);
+        if (rc) perror("Failed to acquire mutex of active clients\n");
+
         while (linked_list_size(active_clients) < 1 && sending_unit_run)
             pthread_cond_wait(messages_exist_cond, active_clients_mutex);
         if (!sending_unit_run) { // Required for termination request.
@@ -189,8 +235,11 @@ start_sending_unit(void *args)
 
         // Select the first client with a pending outgoing message.
         client_t *selected = (client_t *) linked_list_pop(active_clients);
-        pthread_mutex_lock(selected->out_mutex);
+        rc = pthread_mutex_lock(selected->out_mutex);
+        if (rc) perror("Failed to acquire mutex of selected client\n");
+
         message = (message_t *) linked_list_pop(selected->out_messages);
+        pthread_cond_signal(selected->out_message_removed);
 
         // If there are pending messages from this client, push it to the back.
         // A simple one-message round-robin scheduling is used.
@@ -211,12 +260,14 @@ start_sending_unit(void *args)
 void
 NACK_message(message_t *m, uint8_t error_code)
 {
-    printf("NACK message\n");
+    int rc;
+    // printf("NACK message\n");
 
-    m->flags |= error_code;
+    m->flags = error_code;
 
     client_t *src = NULL;
 
+    pthread_mutex_lock(clients_mutex);
     // Acquire the source of the message.
     iterator_t * it = linked_list_iterator(clients);
     while(iterator_has_next(it)) {
@@ -226,17 +277,28 @@ NACK_message(message_t *m, uint8_t error_code)
             break;
         }
     }
+    iterator_destroy(it);
 
     // If the source has gone offline, it's impossible to NACK the message.
     if (src) {
+        // DEBUG
+        // char txt_addr[INET_ADDRSTRLEN];
+        // struct in_addr bin_addr;
+        // bin_addr.s_addr = htonl(src->address);
+        // inet_ntop(AF_INET, &bin_addr, txt_addr, INET_ADDRSTRLEN);
+        // printf("NACKing to: %s:%d\n", txt_addr, src->port);
+
         char *out_buffer = message_host_to_net(m);
-        pthread_mutex_lock(src->sock_wr_mutex);
-        int n = write(src->socket_fd, out_buffer, sizeof(message_t));
+        rc = pthread_mutex_lock(src->sock_wr_mutex);
+        if (rc) perror("Failed to acquire socket writing mutex.\n");
+        int socket_fd = src->socket_fd;
+        int n = send(socket_fd, out_buffer, sizeof(message_t), MSG_NOSIGNAL);
         pthread_mutex_unlock(src->sock_wr_mutex);
         if (n < (int) sizeof(message_t))
             fprintf(stderr, "Failed to sent NACK message.\n");
         free(out_buffer);
     }
+    pthread_mutex_unlock(clients_mutex);
 }
 
 
@@ -244,7 +306,9 @@ void
 send_message(message_t *m)
 {
     client_t *dest = NULL;
+    int rc;
 
+    pthread_mutex_lock(clients_mutex);
     // Search all connected clients for the requested destination.
     iterator_t * it = linked_list_iterator(clients);
     while(iterator_has_next(it)) {
@@ -254,34 +318,41 @@ send_message(message_t *m)
             break;
         }
     }
+    iterator_destroy(it);
 
     // If there is a connected client that matches destination ip and port of
     // message, send it the message. Otherwise, NACK it.
     if (dest) {
         char *out_buffer = message_host_to_net(m);
-        pthread_mutex_lock(dest->sock_wr_mutex);
-        int n = write(dest->socket_fd, out_buffer, sizeof(message_t));
+        rc = pthread_mutex_lock(dest->sock_wr_mutex);
+        if (rc) perror("Failed to acquire socket writing mutex.\n");
+        int n = send(
+            dest->socket_fd, out_buffer, sizeof(message_t), MSG_NOSIGNAL);
         pthread_mutex_unlock(dest->sock_wr_mutex);
         if (n < (int) sizeof(message_t))
             fprintf(stderr, "Failed to sent message.\n");
         free(out_buffer);
 
-    } else NACK_message(m, ERR_TARGET_DOWN);
+    } else {
+        pthread_mutex_unlock(clients_mutex);
+        NACK_message(m, ERR_TARGET_DOWN);
+    }
 
+    pthread_mutex_unlock(clients_mutex);
     // DEBUG code.
-    char src_ip[INET_ADDRSTRLEN];
-    char dest_ip[INET_ADDRSTRLEN];
-
-    struct in_addr src_addr;
-    struct in_addr dest_addr;
-    src_addr.s_addr = htonl(m->src_addr);
-    dest_addr.s_addr = htonl(m->dest_addr);
-    inet_ntop(AF_INET, &src_addr, src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &dest_addr, dest_ip, INET_ADDRSTRLEN);
-
-    printf("Sending message from %s:%d to %s:%d\n",
-           src_ip, m->src_port,
-           dest_ip, m->dest_port);
+    // char src_ip[INET_ADDRSTRLEN];
+    // char dest_ip[INET_ADDRSTRLEN];
+    //
+    // struct in_addr src_addr;
+    // struct in_addr dest_addr;
+    // src_addr.s_addr = htonl(m->src_addr);
+    // dest_addr.s_addr = htonl(m->dest_addr);
+    // inet_ntop(AF_INET, &src_addr, src_ip, INET_ADDRSTRLEN);
+    // inet_ntop(AF_INET, &dest_addr, dest_ip, INET_ADDRSTRLEN);
+    //
+    // printf("Sending message from %s:%d to %s:%d\n",
+    //        src_ip, m->src_port,
+    //        dest_ip, m->dest_port);
     // DEBUG end.
 }
 
@@ -321,15 +392,21 @@ client_create(int socket_fd)
     client->address = ntohl(addr.sin_addr.s_addr);
     client->port = ntohs(addr.sin_port);
     client->out_messages = linked_list_create();
-    client->out_mutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
-    client->sock_wr_mutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
-    if (!client->out_mutex || !client->sock_wr_mutex) {
+    client->out_mutex =
+        (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    client->sock_wr_mutex =
+        (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    client->out_message_removed =
+        (pthread_cond_t *) malloc(sizeof(pthread_cond_t));
+    if (!client->out_mutex || !client->sock_wr_mutex ||
+        !client->out_message_removed) {
         perror("client_create() failed");
         return NULL;
     }
 
     rc = pthread_mutex_init(client->out_mutex, NULL);
     rc |= pthread_mutex_init(client->sock_wr_mutex, NULL);
+    rc |= pthread_cond_init(client->out_message_removed, NULL);
     if (rc) {
         perror("client_create() failed to init a mutex");
         client_destroy(client);  // Clean all allocated memory before return.
@@ -349,13 +426,18 @@ client_destroy(client_t *client)
 
     if (client->out_mutex) {
         rc = pthread_mutex_destroy(client->out_mutex);
-        if (rc) perror("Failed to destroy mutex.");
+        if (rc) perror("Failed to destroy mutex");
         free(client->out_mutex);
     }
     if (client->sock_wr_mutex) {
         rc = pthread_mutex_destroy(client->sock_wr_mutex);
-        if (rc) perror("Failed to destroy mutex.");
+        if (rc) perror("Failed to destroy mutex");
         free(client->sock_wr_mutex);
+    }
+    if (client->out_message_removed) {
+        rc = pthread_cond_destroy(client->out_message_removed);
+        if (rc) perror("Failed to destroy condition");
+        free(client->out_message_removed);
     }
     if (client->out_messages) linked_list_destroy(client->out_messages);
     free(client);

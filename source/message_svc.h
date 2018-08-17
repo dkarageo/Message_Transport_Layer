@@ -48,6 +48,8 @@ typedef struct {
     uint16_t port;                // Port number of the client to send messages.
     linked_list_t *out_messages;  // A list with pending messages to be sent.
     pthread_mutex_t *out_mutex;   // A mutex for out_messages list synchronization.
+    // Condition for signaling removal of out message.
+    pthread_cond_t *out_message_removed;
     pthread_mutex_t *sock_wr_mutex;  // Mutex for synchronizing socket writing.
 } client_t;
 
