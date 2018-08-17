@@ -93,7 +93,7 @@ linked_list_push(linked_list_t *list, void *data)
     node->next = prev_first;
     node->prev = list->root;
     list->root->next = node;
-    prev_first->prev = node;
+    if (prev_first) prev_first->prev = node;
 
     node->data = data;
 
