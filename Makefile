@@ -15,10 +15,16 @@ server_objects=$(addprefix $(OBJDIR)/, \
 									message.o )
 
 client_objects=$(addprefix $(OBJDIR)/, \
-									client.o \
+									demo_client.o \
+									client_svc.o \
 									message.o \
 									message_generator.o \
 									linked_list.o )
+
+test_objects=$(addprefix $(OBJDIR)/, \
+									test_message_generator.o \
+									message_generator.o \
+									message.o )
 
 all: server client
 
@@ -26,7 +32,11 @@ server: $(server_objects) | $(BINDIR)
 	$(CC) $(server_objects) -o $(BINDIR)/server $(LDLIBS) $(CFLAGS)
 
 client: $(client_objects) | $(BINDIR)
-	$(CC) $(client_objects) -o $(BINDIR)/client $(LDLIBS) $(CFLAGS)
+	$(CC) $(client_objects) -o $(BINDIR)/demo_client $(LDLIBS) $(CFLAGS)
+
+test: $(test_objects) | $(BINDIR)
+	$(CC) $(test_objects) -o $(BINDIR)/test_message_generator $(LDLIBS) $(CFLAGS)
+	./$(BINDIR)/test_message_generator
 
 $(OBJDIR)/%.o: %.c | $(OBJDIR)
 	$(CC) $< -c -o $@ $(LDLIBS) $(CFLAGS)
