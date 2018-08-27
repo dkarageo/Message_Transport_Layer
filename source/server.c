@@ -5,11 +5,29 @@
  *  for course "Embedded And Realtime Systems".
  *  Electrical and Computers Engineering Department, AuTh, GR - 2017-2018
  *
- * A TCP server able to handle multiple connections in a thread based model.
+ * A TCP server that runs a Message Transport Layer (MTL) service.
  *
- * Usage: exec_name <port>
+ * A logger can also be enabled for monitoring the activity of MTL by providing
+ * a path to a log file.
+ *
+ * A rate limiter is also implemented, allowing for step by step reduction of
+ * sending rate of MTL. It is usefull for testing the behavior of MTL accross
+ * a series of different sending rates. It can be enabled by providing <min_rate>,
+ * <step>, <max_rate> and <period> arguments. When enabled, MTL starts at
+ * <max_rate> and after <period> milliseconds it is reduced by <step>, until
+ * it doesn't drop below <min_rate>. When <min_rate> is exceeded, then MTL
+ * jumps back at <max_rate> and starts decreasing it again.
+ *
+ * Usage: ./exec_name <port> [<log_file> [<min_rate> <step> <max_rate> <period>]]
  *  where:
- *      -port : Port number on which to start the server.
+ *      -port : Port to be used by server.
+ *      -log_file [optional] : Path to a file that will be used for log data.
+ *      -min_rate [optional, requires log_file] : Minimum sending rate of MTL.
+ *      -step [optional, requires min_rate] : Step of reduction for sending
+ *              rate of MTL.
+ *      -max_rate [optional, requires step] : Max sending rate of MTL.
+ *      -period : Period of rate limiter in milliseconds (ms) to reduce rate
+ *              by <step>.
  */
 
 #include <stdio.h>
@@ -59,7 +77,7 @@ int main(int argc, char *argv[])
     // Listening port should be provided by caller.
     if (argc < 2) {
         fprintf(stderr, "ERROR: No listening port provided.\n");
-        fprintf(stdout, "Usage: %s <port>\n", argv[0]);
+        fprintf(stdout, "Usage: %s <port> [<log_file>]\n", argv[0]);
         exit(1);
     }
 
@@ -74,7 +92,21 @@ int main(int argc, char *argv[])
     listener_fd = init_listener(port);
 
     // Init Message Transport Layer service.
-    init_svc();
+    struct svc_cfg options;
+    memset(&options, 0, sizeof(options));
+    if (argc > 2) {
+        options.enable_logger = 1;
+        options.log_fn = argv[2];
+
+        if (argc > 6) {
+            options.enable_speed_limiter = 1;
+            options.min_rate = atol(argv[3]);
+            options.rate_step = atol(argv[4]);
+            options.max_rate = atol(argv[5]);
+            options.time_of_step = atol(argv[6]);
+        }
+    }
+    init_svc(&options);
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -106,7 +138,7 @@ int main(int argc, char *argv[])
 
     // Terminate Message Transport Layer service.
     stop_svc();
-    printf("MTP terminated.\n");
+    printf("MTP terminated successfully!\n");
 
     // Clean up resources.
     pthread_mutex_destroy(list_mutex);

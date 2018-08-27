@@ -54,6 +54,17 @@ typedef struct {
 } client_t;
 
 
+struct svc_cfg {
+    int enable_logger;  // Boolean flag for enabling logging.
+    char *log_fn;       // Path to logfile (valid only if enable_logger == 1).
+    int enable_speed_limiter;  // Boolean flag for enabling speed limiter.
+    long time_of_step;  // Step in ms to reduce message rate by rate_step
+    long max_rate;   // Max messagge rate allowed (messages/sec).
+    long min_rate;   // Min message rate allowed (messages/sec).
+    long rate_step;  // Step of rate reduction (messages/sec).
+};
+
+
 /**
  * Creates a client object for the client connected to the given socket.
  *
@@ -84,7 +95,7 @@ client_destroy(client_t *client);
 * Initializes messaging service.
 */
 void
-init_svc();
+init_svc(struct svc_cfg *options);
 
 /**
  * Entry point for handling new connections (clients).
