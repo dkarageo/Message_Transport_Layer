@@ -19,8 +19,6 @@
 
 void *
 _message_generator_enter(void *args);
-int
-_rand_lim(int limit, struct random_data *state);
 
 
 // Content of newly created messages.
@@ -61,10 +59,12 @@ message_generator_destroy(message_generator_t *generator)
 }
 
 void
-message_generator_set_message_listener(message_generator_t *generator,
-                                       void (*callback) (message_t *))
+message_generator_set_message_listener(
+        message_generator_t *generator,
+        void (*callback) (message_t *, void *), void *arg)
 {
     generator->handle_message = callback;
+    generator->arg = arg;
 }
 
 void
@@ -88,8 +88,11 @@ message_generator_add_dest_address(message_generator_t *generator,
 }
 
 int
-message_generator_start(message_generator_t *generator)
+message_generator_start(message_generator_t *generator,
+                        struct message_generator_cfg *options)
 {
+    generator->options = options;
+
     generator->running = 1;
     return pthread_create(
             &generator->tid, NULL,
@@ -108,7 +111,11 @@ _message_generator_enter(void *args)
 {
     message_generator_t *g = (message_generator_t *) args;
 
-    while (g->running) {
+    long generated = 0;
+    long stop_at = 0;
+    if (g->options) stop_at = g->options->stop_count;
+
+    while (g->running && (generated < stop_at || stop_at == 0)) {
         if (!g->handle_message) {
             fprintf(
                 stderr,
@@ -117,32 +124,22 @@ _message_generator_enter(void *args)
             continue;
         }
 
-        message_t *m = message_create();
+        // Sequentially generate a message for each destination in the list.
+        for (int i = 0; i < g->dest_count; i++) {
+            message_t *m = message_create();
 
-        // Pick a random destination.
-        int i = _rand_lim(g->dest_count-1, g->prng_state);
-        m->dest_addr = g->dest_addresses[i];
-        m->dest_port = g->dest_ports[i];
-        // Fill the data field with prefixed data.
-        memset(m->data, 0, MESSAGE_DATA_LENGTH);
-        memcpy(m->data, message_content, sizeof(message_content));
+            m->dest_addr = g->dest_addresses[i];
+            m->dest_port = g->dest_ports[i];
+            // Fill the data field with prefixed data.
+            memset(m->data, 0, MESSAGE_DATA_LENGTH);
+            snprintf(m->data, MESSAGE_DATA_LENGTH,
+                     "%ld:%s", generated, message_content);
 
-        g->handle_message(m);
+            g->handle_message(m, g->arg);
+        }
+
+        generated++;
     }
 
     return 0;
-}
-
-int
-_rand_lim(int limit, struct random_data *state)
-{
-    int divisor = RAND_MAX / (limit+1);
-    int32_t retval;
-
-    do {
-        random_r(state, &retval);
-        retval = retval / divisor;
-    } while (retval > limit);
-
-    return retval;
 }
