@@ -15,8 +15,12 @@
  *   message_destroy(message_t *m)
  *  -char *
  *   message_host_to_net(message_t *m)
+ *  -void *
+ *   message_host_to_net_buf(message_t *m, void *buffer);
  *  -message_t *
  *   message_net_to_host(char *m)
+ *  -message_t *
+ *   message_net_to_host_buf(void *m, message_t *dest)
  *
  * Version: 0.1
  */
@@ -73,6 +77,22 @@ message_destroy(message_t *m);
  *
  * Parameters:
  *  -m : A message object in host byte order.
+ *  -buffer : Buffer to store the converted message, at least of size
+ *          sizeof(message_t);
+ *
+ * Returns:
+ *  Pointer provided in buffer. Buffer should now contain a serialized message
+ *  object represented in network byte order. It can be send as is through
+ *  the network.
+ */
+void *
+message_host_to_net_buf(message_t *m, void *buffer);
+
+/**
+ * Converts a message from host byte order to network byte order.
+ *
+ * Parameters:
+ *  -m : A message object in host byte order.
  *
  * Returns:
  *  A serialized message object represented in network byte order. It can
@@ -80,6 +100,20 @@ message_destroy(message_t *m);
  */
 void *
 message_host_to_net(message_t *m);
+
+/**
+ * Converts a message from network byte order to host byte order.
+ *
+ * Parameters:
+ *  -m : A serialized message object as received through the network.
+ *  -buffer : Destination to store the converted message.
+ *
+ * Returns:
+ *  Pointer provided in dest. The message it points to should now contain
+ *  the message provided in m buffer in byte order of the host machine.
+ */
+message_t *
+message_net_to_host_buf(void *m, message_t *dest);
 
 /**
  * Converts a message from network byte order to host byte order.

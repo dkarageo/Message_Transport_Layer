@@ -32,21 +32,46 @@ message_destroy(message_t *m)
 
 
 void *
-message_host_to_net(message_t *m)
+message_host_to_net_buf(message_t *m, void *buffer)
 {
-    void *serial = calloc(1, sizeof(message_t));
-    message_t *net = (message_t *) serial;
+    message_t *net = (message_t *) buffer;
 
     net->src_addr = htonl(m->src_addr);
     net->src_port = htons(m->src_port);
     net->dest_addr = htonl(m->dest_addr);
     net->dest_port = htons(m->dest_port);
     net->flags = m->flags;
-    net->count = m->count;
+    net->count = htons(m->count);
     net->len = htons(m->len);
     memcpy(net->data, m->data, MESSAGE_DATA_LENGTH);
 
-    return serial;
+    return buffer;
+}
+
+
+void *
+message_host_to_net(message_t *m)
+{
+    void *serial = calloc(1, sizeof(message_t));
+    return message_host_to_net_buf(m, serial);
+}
+
+
+message_t *
+message_net_to_host_buf(void *m, message_t *dest)
+{
+    message_t *mc = (message_t *) m;
+
+    dest->src_addr = ntohl(mc->src_addr);
+    dest->src_port = ntohs(mc->src_port);
+    dest->dest_addr = ntohl(mc->dest_addr);
+    dest->dest_port = ntohs(mc->dest_port);
+    dest->flags = mc->flags;
+    dest->count = ntohs(mc->count);
+    dest->len = ntohs(mc->len);
+    memcpy(dest->data, mc->data, MESSAGE_DATA_LENGTH);
+
+    return dest;
 }
 
 
@@ -54,17 +79,5 @@ message_t *
 message_net_to_host(void *m)
 {
     message_t *host = (message_t *) malloc(sizeof(message_t));
-
-    message_t *mc = (message_t *) m;
-
-    host->src_addr = ntohl(mc->src_addr);
-    host->src_port = ntohs(mc->src_port);
-    host->dest_addr = ntohl(mc->dest_addr);
-    host->dest_port = ntohs(mc->dest_port);
-    host->flags = mc->flags;
-    host->count = mc->count;
-    host->len = ntohs(mc->len);
-    memcpy(host->data, mc->data, MESSAGE_DATA_LENGTH);
-
-    return host;
+    return message_net_to_host_buf(m, host);
 }
