@@ -206,7 +206,7 @@ client_svc_stop(client_svc_t *svc)
                linked_list_size(svc->nacked_out_messages) > 0)
             pthread_cond_wait(svc->out_messages_not_full, svc->out_messages_mutex);
         pthread_mutex_unlock(svc->out_messages_mutex);
-        sleep(1);
+        // sleep(1);
     }
 
     // Ask socket for shutdown.
@@ -235,12 +235,7 @@ client_svc_schedule_out_message(client_svc_t *svc, message_t *m)
     while ((linked_list_size(svc->out_messages) +
             linked_list_size(svc->nacked_out_messages)) >=
                     MAX_OUT_MESSAGES_BUFFER) {
-        // DEBUG
-        // printf("Waiting to schedule...\n");
         pthread_cond_wait(svc->out_messages_not_full, svc->out_messages_mutex);
-        // DEBUG
-        // printf("Scheduled. %d remaining\n",
-        //        linked_list_size(svc->out_messages));
     }
 
     m->count = svc->counter;
@@ -397,12 +392,14 @@ _start_receiving_messages(client_svc_t *svc)
         &svc->receiver_tid, NULL, _receive_messages, (void *) svc);
 }
 
+
 int
 _stop_receiving_messages(client_svc_t *svc)
 {
     // Wait for receiver unit to terminate before closing the socket.
     return pthread_join(svc->receiver_tid, NULL);
 }
+
 
 /**
  * Entry point for messages receiving unit.
@@ -502,6 +499,7 @@ _modify_send_rate(client_svc_t *svc, double multiplier)
     // else
     //     printf("Decreasing delay to: %ld us\n", svc->flow_delay.tv_nsec / 1000);
 }
+
 
 void
 _wait_for_next_send(client_svc_t *svc)

@@ -36,6 +36,11 @@
  *   client_svc_stop(client_svc_t *svc)
  *  -void
  *   client_svc_schedule_out_message(client_svc_t *svc, message_t *m)
+ *  -void
+ *   client_svc_set_incoming_mes_listener(
+ *       client_svc_t *svc,
+ *       void (*callback) (client_svc_t *, message_t *, void *),
+ *       void *arg)
  *
  * Version: 0.1
  */
@@ -94,23 +99,79 @@ struct client_svc_cfg {
 };
 
 
+/**
+ * Creates a new client svc object.
+ *
+ * Returns:
+ *  A pointer to the newly created client svc object.
+ */
 client_svc_t *
 client_svc_create();
 
+/**
+ * Destroys given client object.
+ *
+ * After destruction svc should never be dereferenced again.
+ *
+ * Paramters:
+ *  -svc : A pointer to a client svc object.
+ */
 void
 client_svc_destroy(client_svc_t *svc);
 
+/**
+ * Connects a MTL client service to a remote MTL server.
+ *
+ * Parameters:
+ *  -svc : Client service object to connect.
+ *  -options : Configuration struct defining remote server address and
+ *          other needed parameters.
+ *
+ * Returns:
+ *  On success returns 0 and client is connected. client_svc_start() can now
+ *  be called. On error returns a non-zero number.
+ */
 int
 client_svc_connect(client_svc_t *svc, struct client_svc_cfg *options);
 
+/**
+ * Starts given client service.
+ *
+ * Upon successful start, given client service can be used for sending and
+ * receiving messages. In order to receive messages, a callback routine should
+ * have been set, using client_svc_set_incoming_mes_listener().
+ *
+ * Parameters:
+ *  -svc : Client service to be started.
+ *
+ * Returns:
+ *  On success returns 0. Otherwise returns a non-zero number.
+ */
 int
 client_svc_start(client_svc_t *svc);
 
+/**
+ * Stops given client service.
+ *
+ * After stopping a client service it cannot receive or send any messages.
+ *
+ * Stopping a service will cause any NACKed messages that arrives at a later
+ * time to be lost.
+ *
+ * Parameters:
+ *  -svc : Client service to be stopped.
+ *
+ * Returns:
+ *  On success returns 0. Otherwise returns a non-zero integer.
+ */
 int
 client_svc_stop(client_svc_t *svc);
 
 /**
  * Schedules given message for sending.
+ *
+ * If buffer is full, this routine will block until the message is successfully
+ * scheduled.
  *
  * Parameters:
  *  -m: Message to be scheduled for sending.
@@ -118,6 +179,22 @@ client_svc_stop(client_svc_t *svc);
 void
 client_svc_schedule_out_message(client_svc_t *svc, message_t *m);
 
+/**
+ * Sets a listener routine for incoming messages.
+ *
+ * Each time a message is received, listener routine will be passed a pointer
+ * to the client service object that received the message, a pointer to the
+ * received message and the extra arg provided at when set the listener
+ * using client_svc_set_incoming_mes_listener().
+ *
+ * Since callback routine is directly called by the receiver thread, it should
+ * be light enough in order for receiver to meet its expected rate.
+ *
+ * Parameters:
+ *  -svc : Client service on which an incoming message listener will be installed.
+ *  -callback : Routine to be called upon receiving a new message.
+ *  -arg : Argument to be passed to callback routine.
+ */
 void
 client_svc_set_incoming_mes_listener(
         client_svc_t *svc,
