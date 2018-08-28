@@ -45,10 +45,6 @@ int
 _send_message(client_svc_t *svc, message_t *m);
 void
 _handle_nacked_message(client_svc_t *svc, message_t *m);
-void
-_modify_send_rate(client_svc_t *svc, double multiplier);
-void
-_wait_for_next_send(client_svc_t *svc);
 
 
 client_svc_t *
@@ -79,12 +75,7 @@ client_svc_create()
     svc->handle_incoming = NULL;
     svc->counter = 0;
     svc->sender_unit_run = 0;
-    svc->flow_balance = 0;
-
-    // Default wait interval should be set to 100us.
-    svc->flow_delay.tv_sec = 0;
-    svc->flow_delay.tv_nsec = 100 * 1000;  // 100 us
-
+    
     return svc;
 
 error:
@@ -332,12 +323,6 @@ _send_messages(void *args)
             break;
         }
 
-        svc->flow_balance++;
-        if (svc->flow_balance >= INCREASE_RATE_AT_CORRECT_NUM) {
-            svc->flow_balance = 0;
-            _modify_send_rate(svc, RATE_AT_CORRECT);
-        }
-
         pthread_cond_signal(svc->out_messages_not_full);
         pthread_mutex_unlock(svc->out_messages_mutex);
 
@@ -346,7 +331,6 @@ _send_messages(void *args)
         first_message = 0;
 
         message_destroy(m);
-        _wait_for_next_send(svc);
     }
 
     pthread_exit(0);
@@ -438,48 +422,6 @@ _handle_nacked_message(client_svc_t *svc, message_t *m)
         // NACKed message will be the first to be send.
         linked_list_append(svc->nacked_out_messages, m);
         pthread_cond_signal(svc->out_messages_exist);
-
-        // If the defined number of NACKed messages is reached, then decrease
-        // rate. By clearing any positive count, it requires that no NACKed
-        // messages have been received in the defined row, in order to increase
-        // rate, thus trying to keep NACKed messaged at 0.
-        if (svc->flow_balance > 0) svc->flow_balance = 0;
-        svc->flow_balance--;
-        if (svc->flow_balance <= -DECREASE_RATE_AT_NACKED_NUM) {
-            _modify_send_rate(svc, RATE_AT_NACKED);
-            svc->flow_balance = 0;
-        }
-
         pthread_mutex_unlock(svc->out_messages_mutex);
     }
-}
-
-
-void
-_modify_send_rate(client_svc_t *svc, double multiplier)
-{
-    // long new_rate = (long) ((double) svc->flow_delay.tv_nsec / multiplier);
-    //
-    // // Only allow values in the range [1us, 1s].
-    // if (new_rate > 999999999) svc->flow_delay.tv_nsec = 999999999;
-    // else if (new_rate < 1000) svc->flow_delay.tv_nsec = 1000;
-    // else svc->flow_delay.tv_nsec = new_rate;
-    //
-    // // DEBUG
-    // if (multiplier < 1)
-    //     printf("Increasing delay to: %ld us\n", svc->flow_delay.tv_nsec / 1000);
-    // else
-    //     printf("Decreasing delay to: %ld us\n", svc->flow_delay.tv_nsec / 1000);
-}
-
-
-void
-_wait_for_next_send(client_svc_t *svc)
-{
-    // struct timespec rem;
-    // rem.tv_sec = 0;
-    // rem.tv_nsec = 0;
-    // do {
-    //     nanosleep(&svc->flow_delay, &rem);
-    // } while (rem.tv_sec != 0 || rem.tv_nsec != 0);
 }
