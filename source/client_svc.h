@@ -71,6 +71,10 @@ struct Client_Svc {
     pthread_t sender_tid;    // Thread id of sender unit.
     int sender_unit_run;     // Indicates whether sender unit should keep running.
     uint16_t counter;     // Counter for outgoing messages.
+    // +SEND/-NACK Indicator for controlling flow rate.
+    long int flow_balance;
+    // Time for waiting between each successive send.
+    struct timespec flow_delay;
     // Callback function for incoming messages.
     void (*handle_incoming) (client_svc_t *svc, message_t *m, void *arg);
     void *callback_arg;
