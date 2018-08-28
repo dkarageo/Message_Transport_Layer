@@ -288,6 +288,9 @@ _send_messages(void *args)
 
         pthread_mutex_lock(svc->out_messages_mutex);
 
+        // DEBUG
+        // printf("Acquired mutex for sending message.\n");
+
         // Pause sender when there are no outgoing messages.
         while (svc->sender_unit_run &&
                linked_list_size(svc->out_messages) == 0 &&
@@ -297,6 +300,9 @@ _send_messages(void *args)
             pthread_mutex_unlock(svc->out_messages_mutex);
             break;
         }
+        // DEBUG
+        // printf("Found messages in some list.\n");
+        // printf("Counter before check %d\n", prev_counter);
 
         // Pause sender when a NACKed message has been resent, but more messages
         // had been previously sent from the normal stream. Server will NACK
@@ -309,6 +315,8 @@ _send_messages(void *args)
             // it should be send.
             if (linked_list_size(svc->nacked_out_messages)) {
                 m = (message_t *) linked_list_pop(svc->nacked_out_messages);
+                // DEBUG
+                // printf("Picking from NACKed: %d\n", m->count);
                 break;
             }
 
@@ -320,10 +328,21 @@ _send_messages(void *args)
             if (svc->sender_unit_run && !first_message &&
                 (prev_counter+1)%(MESSAGE_COUNT_MAX+1) != m->count) {
 
+                // DEBUG
+                // printf("Waiting for correct order...\n");
+                // printf("Message has: %d - Expected: %d\n",
+                //        m->count, (prev_counter+1)%(MESSAGE_COUNT_MAX+1));
+                // printf("Pending normal messages: %d\n",
+                //        linked_list_size(svc->out_messages));
+                // printf("Pending nacked messages: %d\n",
+                //        linked_list_size(svc->nacked_out_messages));
+
                 pthread_cond_wait(
                     svc->out_messages_exist, svc->out_messages_mutex);
             } else {
                 m = linked_list_pop(svc->out_messages);
+                // DEBUG
+                // printf("Picking from Normal: %d\n", m->count);
                 break;
             }
         }
@@ -339,11 +358,18 @@ _send_messages(void *args)
         }
 
         pthread_cond_signal(svc->out_messages_not_full);
+        // DEBUG
+        // printf("Acquired messages from list.\n");
         pthread_mutex_unlock(svc->out_messages_mutex);
 
+        // DEBUG
+        // printf("Sending message: %d\n", (prev_counter+1)%MESSAGE_COUNT_MAX);
         _send_message(svc, m);
+        // DEBUG
+        // printf("Sent message: %d\n", m->count);
         prev_counter = m->count;
         first_message = 0;
+        // printf("Updated prev_counter to %d\n", prev_counter);
 
         message_destroy(m);
         _wait_for_next_send(svc);
@@ -397,6 +423,8 @@ _receive_messages(void *args)
         message_t *message = message_net_to_host(in_buffer);
 
         if (message->flags) {
+            // DEBUG
+            // fprintf(stderr, "NACKed message received.\n");
             _handle_nacked_message(svc, message);
         } else if (svc->handle_incoming)
             svc->handle_incoming(svc, message, svc->callback_arg);
