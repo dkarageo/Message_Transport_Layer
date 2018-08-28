@@ -225,9 +225,6 @@ handle_client(int socket_fd)
     int mspace_i = 0;  // Mod(CLIENT_BUF_LEN+1) counter for circular usage
                        // of mspace.
 
-    // DEBUG
-    // int biggest_error = 0;
-
     // Keep reading incoming messages until the connection is dead.
     while ((n = recv(socket_fd, in, sizeof(message_t), MSG_WAITALL)) > 0) {
         if (n < (int) sizeof(message_t)) {
@@ -245,32 +242,7 @@ handle_client(int socket_fd)
         // from the previous successfully received message.
         if (message->count != (counter+1)%(MESSAGE_COUNT_MAX+1) && !first_message) {
             error_code |= ERR_INVALID_ORDER;
-            // DEBUG
-            // printf("NACKing because of INVALID_ODER\n");
-            // printf("Message had: %d - Expected: %d\n", message->count, (counter+1)%256);
-
-            // DEBUG
-            // int m_c = message->count;
-            // int expect = (counter+1)%(MESSAGE_COUNT_MAX+1);
-            // if (expect > m_c) {
-            //     if (biggest_error < (m_c+(MESSAGE_COUNT_MAX+1)-expect))
-            //         biggest_error = m_c+(MESSAGE_COUNT_MAX+1)-expect;
-            // } else {
-            //     if (biggest_error < (m_c-expect)) biggest_error = m_c-expect;
-            // }
-            // printf("Biggest error: %d\n", biggest_error);
         }
-
-        // If buffer is full, discard message.
-        // --- Save a few CPU cycles by not synchronizing check of linked list
-        // length. It's better to just NACK a message in the edge case, instead
-        // of constantly locking. ---
-        // if (linked_list_size(c->out_messages) >= CLIENT_BUF_LEN) {
-        //     error_code |= ERR_BUFFER_FULL;
-        //     // DEBUG
-        //     // printf("NACKing because of BUFFER FULL\n");
-        // }
-        // printf("Received incoming. Error code: %d\n", error_code);
 
         if (!error_code) {
             first_message = 0;
@@ -407,24 +379,12 @@ void
 NACK_message(message_t *m, uint8_t error_code)
 {
     int rc;
-    // printf("NACK message\n");
 
     m->flags = error_code;
 
     client_t *src = NULL;
 
     pthread_mutex_lock(clients_mutex);
-
-    // // Acquire the source of the message.
-    // iterator_t * it = linked_list_iterator(clients);
-    // while(iterator_has_next(it)) {
-    //     client_t *c = iterator_next(it);
-    //     if (m->src_addr == c->address && m->src_port == c->port) {
-    //         src = c;
-    //         break;
-    //     }
-    // }
-    // iterator_destroy(it);
 
     int index = (m->src_addr + m->src_port) & 0xFF;
     linked_list_t *hashed_list = clients[index];
@@ -444,13 +404,6 @@ NACK_message(message_t *m, uint8_t error_code)
 
     // If the source has gone offline, it's impossible to NACK the message.
     if (src) {
-        // DEBUG
-        // char txt_addr[INET_ADDRSTRLEN];
-        // struct in_addr bin_addr;
-        // bin_addr.s_addr = htonl(src->address);
-        // inet_ntop(AF_INET, &bin_addr, txt_addr, INET_ADDRSTRLEN);
-        // printf("NACKing to: %s:%d\n", txt_addr, src->port);
-
         char *out_buffer = message_host_to_net(m);
         rc = pthread_mutex_lock(src->sock_wr_mutex);
         if (rc) perror("Failed to acquire socket writing mutex.\n");
@@ -475,16 +428,6 @@ send_message(message_t *m)
     int rc;
 
     pthread_mutex_lock(clients_mutex);
-    // // Search all connected clients for the requested destination.
-    // iterator_t * it = linked_list_iterator(clients);
-    // while(iterator_has_next(it)) {
-    //     client_t *c = iterator_next(it);
-    //     if (m->dest_addr == c->address && m->dest_port == c->port) {
-    //         dest = c;
-    //         break;
-    //     }
-    // }
-    // iterator_destroy(it);
 
     int index = (m->dest_addr + m->dest_port) & 0xFF;
     linked_list_t *hashed_list = clients[index];
@@ -522,22 +465,6 @@ send_message(message_t *m)
     pthread_mutex_unlock(clients_mutex);
 
     total_messages_sent++;
-
-    // DEBUG code.
-    // char src_ip[INET_ADDRSTRLEN];
-    // char dest_ip[INET_ADDRSTRLEN];
-    //
-    // struct in_addr src_addr;
-    // struct in_addr dest_addr;
-    // src_addr.s_addr = htonl(m->src_addr);
-    // dest_addr.s_addr = htonl(m->dest_addr);
-    // inet_ntop(AF_INET, &src_addr, src_ip, INET_ADDRSTRLEN);
-    // inet_ntop(AF_INET, &dest_addr, dest_ip, INET_ADDRSTRLEN);
-    //
-    // printf("Sending message from %s:%d to %s:%d\n",
-    //        src_ip, m->src_port,
-    //        dest_ip, m->dest_port);
-    // DEBUG end.
 }
 
 
@@ -820,21 +747,6 @@ _speed_limiter_worker(void *arg)
 
     long cur_rate = specs->max_rate;
 
-    // struct timespec incr_step;  // Step of increment for message sending period.
-    // struct timespec max_period; // Period of minimum rate.
-    // struct timespec min_period; // Period of maximum rate.
-    // incr_step.tv_sec = 1 / specs->rate_step;
-    // incr_step.tv_nsec = (1000000000 / specs->rate_step) % 1000000000;
-    // max_period.tv_sec = 1 / specs->min_rate;
-    // max_period.tv_nsec = (1000000000 / specs->min_rate) % 1000000000;
-    // min_period.tv_sec = 1 / specs->max_rate;
-    // min_period.tv_nsec = (1000000000 / specs->max_rate) % 1000000000;
-
-    // DEBUG
-    // printf("Max period: %ld\n", max_period.tv_nsec);
-    // printf("Min period: %ld\n", min_period.tv_nsec);
-    // printf("Step: %ld\n", incr_step.tv_nsec);
-
     // Set first target to current time plus a period.
     clock_gettime(CLOCK_MONOTONIC, &target);
     timespec_add(&target, &target, &period_spec);
@@ -856,23 +768,6 @@ _speed_limiter_worker(void *arg)
         if (cur_rate < specs->min_rate) cur_rate = specs->max_rate;
         message_sending_period.tv_sec = 1 / cur_rate;
         message_sending_period.tv_nsec = (1000000000 / cur_rate) % 1000000000;
-
-        // DEBUG
-        // struct timespec new_period;
-        // timespec_add(&new_period, &message_sending_period, &incr_step);
-        // if (new_period.tv_sec > max_period.tv_sec ||
-        //         (new_period.tv_sec == max_period.tv_sec &&
-        //          new_period.tv_nsec > max_period.tv_nsec)) {
-        //     // When new sending rate is lower than min limit, reset to
-        //     // max rate and start decreasing it again.
-        //     message_sending_period.tv_sec = min_period.tv_sec;
-        //     message_sending_period.tv_nsec = min_period.tv_nsec;
-        // } else {
-        //     message_sending_period.tv_sec = new_period.tv_sec;
-        //     message_sending_period.tv_nsec = new_period.tv_nsec;
-        // }
-
-        // printf("New time in nanos: %ld\n", message_sending_period.tv_nsec);
 
         // Set next target. Everything is integral, so no error accumulation.
         timespec_add(&target, &target, &period_spec);
