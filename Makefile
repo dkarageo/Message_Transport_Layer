@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O3 -Wall -Wextra -std=gnu11
+CFLAGS=-O3 -Wall -Wextra -std=gnu11 -g
 LDLIBS=-lpthread
 BINDIR=bin
 OBJDIR=obj
